@@ -1,0 +1,79 @@
+name: CI
+
+permissions: {}
+
+on:
+  push:
+    branches: [master]
+  pull_request: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  GOLANGCI_LINT_VERSION: v1.60
+
+jobs:
+  # Check if the code compiles.
+  check:
+    name: go build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: go build
+        run: go build
+
+  # Check formatting.
+  fmt:
+    name: go fmt
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: go fmt
+        run: test -z $(gofmt -l .)
+
+  # Check warnings.
+  lint:
+    name: golangci-lint
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+
+  # Run tests against different systems.
+  test:
+    name: "go test (${{ matrix.toolchain }} on ${{ matrix.os }})"
+    needs: check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        toolchain: [stable, oldstable]
+        include:
+          - os: windows-latest
+            toolchain: stable
+          - os: macos-latest
+            toolchain: stable
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.toolchain }}
+      - name: go test
+        run: go test
